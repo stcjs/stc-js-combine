@@ -7,13 +7,23 @@ const REG = {
 };
 const HANDLEDRFILES = 'handledFiles';
 
+
+console.log(Plugin.prototype.cache);
+for(var key in Plugin.prototype) {
+    console.log(key);
+
+}
+
 export default class JSCombinePlugin extends Plugin {
     /**
      * run
      */
     async run(){
+        // console.log(this.constructor.name, this.getContent, this.getAst);
+        // console.log(this.cache);
+         return;
         let content, pathPreRes, pathPre, scipts, newFileContent = [], curHandledFiles = {}, handledFiles = await this.cache(HANDLEDRFILES);
-        content = this.getContent('utf8');
+        content = await this.getContent('utf8');
         //去掉注释
         content = content.replace(REG.COMMENTS, '');
         //得到公共路径
@@ -22,7 +32,7 @@ export default class JSCombinePlugin extends Plugin {
             pathPre = pathPre[2] + '/';
             scripts = content.match(REG.DOCUMENT_WRITE);
             if (scripts && scripts.length) {
-                scripts.forEach(async (str) => {
+                let promise = scripts.map(async (str) => {
                     let filePath,  fileContent, fileName, res;
                     res = REG.DOCUMENT_WRITE.exec(str);
                     if (!res || !res[1]){
@@ -43,16 +53,18 @@ export default class JSCombinePlugin extends Plugin {
                         }
                     }
                 });
+                await Promise.all(promise);
             }
         }
-        return newFileContent.length ? this.setContent(newFileContent.join(';')) : this.setContent(content);
+        return newFileContent.length ? newFileContent.join(';') : content;
     }
 
     /**
      * update
      */
     update(str){
-        this.setContent(str);
+
+        //this.setContent(str);
     }
 
     /**
