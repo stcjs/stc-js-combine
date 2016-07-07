@@ -6,7 +6,7 @@ const REG = {
     SCRIPT_NAME: /srcPath.*?['"](.*?)['"]/,
     SRCPATH: /var\s+srcPath\s*=\s*("|')(.*?)\1/
 };
-const HANDLEDRFILES = 'handledFiles';
+
 const FILESTREE = 'filesTree';
 
 export default class JSCombinePlugin extends Plugin {
