@@ -126,17 +126,18 @@ export default class JSCombinePlugin extends Plugin {
     static include(){
         return /\.js$/;
     }
+
     /**
      * use cluster
      */
     static cluster(){
-        return true;
+        return false;
     }
 
     /**
      * use cache
      */
     static cache(){
-        return true;
+        return false;
     }
 }
