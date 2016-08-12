@@ -12,7 +12,6 @@ const FILESTREE = 'filesTree';
 export default class JSCombinePlugin extends Plugin {
     log(...args) {
         return;
-        console.log(this.file.path, ':', args);
     }
     async getContentFormCache(filePath) {
         let filesTree = await this.cache(FILESTREE);
@@ -121,7 +120,12 @@ export default class JSCombinePlugin extends Plugin {
         this.log('content: ', str, '<--------end');
         this.setContent(str);
     }
-
+    /**
+     * default include
+     */
+    static include(){
+        return /\.js$/;
+    }
     /**
      * use cluster
      */
