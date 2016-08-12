@@ -10,20 +10,20 @@ const REG = {
 const FILESTREE = 'filesTree';
 
 export default class JSCombinePlugin extends Plugin {
-    log(...args) {
+    log() {
         return;
     }
     async getContentFormCache(filePath) {
         let filesTree = await this.cache(FILESTREE);
         filesTree = filesTree || {};
-        let arr  = [];
+        let arr = [];
         function combine(p) {
             if (filesTree[p]) {
                 filesTree[p].forEach((v) => {
                     combine(v);
                 });
             } else {
-                if (arr.indexOf(p) == -1){
+                if (arr.indexOf(p) === -1){
                     arr.push(p);
                 }
             }
@@ -35,9 +35,9 @@ export default class JSCombinePlugin extends Plugin {
             if (cache) {
                 content.push(cache);
             }
-        })
+        });
         await Promise.all(promise);
-        content = content.join(';')
+        content = content.join(';');
         await this.cache(filePath, content);
         return content;
     }
@@ -46,7 +46,7 @@ export default class JSCombinePlugin extends Plugin {
      */
     async run(){
         let stcFilePath = this.file.path;
-        if (stcFilePath.indexOf('/') != 0) {
+        if (stcFilePath.indexOf('/') !== 0) {
             stcFilePath = '/' + stcFilePath;
         }
         this.log('enter ------------------------>');
@@ -58,7 +58,7 @@ export default class JSCombinePlugin extends Plugin {
         content = await this.getContent('utf8');
         //去掉注释
         content = content.replace(REG.COMMENTS, (word) =>{
-            return /^\/{2,}/.test(word) || /^\/\*/.test(word) ? "" : word;
+            return /^\/{2,}/.test(word) || /^\/\*/.test(word) ? '' : word;
         });
         //获取公共路径
         let srcPathRes = REG.SRCPATH.exec(content);
@@ -78,7 +78,7 @@ export default class JSCombinePlugin extends Plugin {
             let res = REG.SCRIPT_NAME.exec(str);
             if (res && res[1]){
                 let jsPath = srcPath + res[1];
-                if (scriptPathes.indexOf(jsPath) == -1) {
+                if (scriptPathes.indexOf(jsPath) === -1) {
                     scriptPathes.push(jsPath);
                 }
             }
@@ -114,8 +114,8 @@ export default class JSCombinePlugin extends Plugin {
      */
     update(str){
         str = str.trimRight();
-        if (str.charAt(str.length-1) != ';') {
-            str += ';'
+        if (str.charAt(str.length - 1) !== ';') {
+            str += ';';
         }
         this.log('content: ', str, '<--------end');
         this.setContent(str);
