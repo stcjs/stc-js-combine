@@ -1,143 +1,136 @@
 import Plugin from 'stc-plugin';
 
 const REG = {
-    COMMENTS: /("([^\\\"]*(\\.)?)*")|('([^\\\']*(\\.)?)*')|(\/{2,}.*?(\r|\n))|(\/\*(\n|.)*?\*\/)/g,
-    DOCUMENT_WRITE: /document\.write.*?srcPath.*?['"](.*?)['"]/g,
+    DOCUMENT_WRITE: /\s*document\.write.*srcPath[^'\"]+['\"]([^'\"]*\.js)['\"].*/g,
     SCRIPT_NAME: /srcPath.*?['"](.*?)['"]/,
-    SRCPATH: /var\s+srcPath\s*=\s*("|')(.*?)\1/
+    SRCPATH: /var\s+srcPath\s*\=\s*([\'\"])([\w\-\/\.]+)\1/
 };
 
-const FILESTREE = 'filesTree';
+let dependencies = {};
+let cache = {};
 
 export default class JSCombinePlugin extends Plugin {
-    log() {
-        return;
+  /**
+   * check dependence
+   */
+  checkDependence(parentFile, file, add = false){
+    if(!parentFile){
+      return false;
     }
-    async getContentFormCache(filePath) {
-        let filesTree = await this.cache(FILESTREE);
-        filesTree = filesTree || {};
-        let arr = [];
-        function combine(p) {
-            if (filesTree[p]) {
-                filesTree[p].forEach((v) => {
-                    combine(v);
-                });
-            } else {
-                if (arr.indexOf(p) === -1){
-                    arr.push(p);
-                }
-            }
-        }
-        combine(filePath);
-        let content = [];
-        let promise = arr.map(async (v) =>{
-            let cache = await this.cache(v);
-            if (cache) {
-                content.push(cache);
-            }
-        });
-        await Promise.all(promise);
-        content = content.join(';');
-        await this.cache(filePath, content);
-        return content;
+    let combinedFiles = dependencies[parentFile];
+    if(!Array.isArray(combinedFiles)){
+      dependencies[parentFile] = [];
+      if(add){
+        dependencies[parentFile].push(file);
+      }
+      return false;
     }
-    /**
-     * run
-     */
-    async run(){
-        let stcFilePath = this.file.path;
-        if (stcFilePath.indexOf('/') !== 0) {
-            stcFilePath = '/' + stcFilePath;
-        }
-        this.log('enter ------------------------>');
-        //如果有缓存，直接返回
-        let content = await this.cache(stcFilePath);
-        if (content) {
-            return content;
-        }
-        content = await this.getContent('utf8');
-        //去掉注释
-        content = content.replace(REG.COMMENTS, (word) =>{
-            return /^\/{2,}/.test(word) || /^\/\*/.test(word) ? '' : word;
-        });
-        //获取公共路径
-        let srcPathRes = REG.SRCPATH.exec(content);
-        if (!srcPathRes || !srcPathRes[2]) {
-            return content;
-        }
-        let srcPath = srcPathRes[2];
-        this.log('commen path: ', srcPath);
-        //获取document.write script
-        let scripts = content.match(REG.DOCUMENT_WRITE);
-        if (!scripts || !scripts.length) {
-            return content;
-        }
-        //获取script路径
-        let scriptPathes = [];
-        scripts.forEach((str) => {
-            let res = REG.SCRIPT_NAME.exec(str);
-            if (res && res[1]){
-                let jsPath = srcPath + res[1];
-                if (scriptPathes.indexOf(jsPath) === -1) {
-                    scriptPathes.push(jsPath);
-                }
-            }
-        });
-        if (!scriptPathes.length) {
-            return content;
-        }
-        //缓存文件关系
-        let filesTree = await this.cache(FILESTREE);
-        filesTree = filesTree || {};
-        if (!filesTree[stcFilePath]){
-            filesTree[stcFilePath] = scriptPathes;
-            await this.cache(FILESTREE, filesTree);
-        }
-        this.log('scripts: ', scriptPathes);
-        //获取文件内容并缓存
-        let promise = scriptPathes.map(async (filePath) => {
-            let fileContent = await this.cache(filePath);
-            if (fileContent) {
-                return;
-            }
-            let stcFile = await this.getFileByPath(filePath);
-            fileContent = await this.invokeSelf(stcFile);
-            await this.cache(filePath, fileContent);
-        });
-        await Promise.all(promise);
-        content = await this.getContentFormCache(stcFilePath);
-        return content;
+    if(combinedFiles.indexOf(file) > -1){
+      return true;
     }
+    for(let i = 0, length = combinedFiles.length; i < length; i++){
+      let item = combinedFiles[i];
+      if(this.checkDependence(item, file, false)){
+        return true;
+      }
+    }
+    return false;
+  }
+  /**
+   * run
+   */
+  async run(){
+    let parentFile = this.prop('parentFile');
+    let times = parseInt(this.prop('times')) || 1;
+    let filepath = this.file.path;
+    if(times > 20){
+      this.fatal(`${filepath} recursion more than 20 times`);
+    }
+    let oriContent = await this.getContent('utf8') + ';';
+    if(this.checkDependence(parentFile, filepath, true) && oriContent.indexOf(filepath) > -1){
+      return '';
+    }
+    if(cache[filepath]){
+      return cache[filepath];
+    }
+    if(parentFile === './'){
+      parentFile = '';
+    }
+    let out = oriContent.match(REG.DOCUMENT_WRITE);
+    if(out){
+      let matches = oriContent.match(REG.SRCPATH);
+      let srcPath = matches[2];
+      let content = '', len = out.length, flag = false;
+      for(let i = 0; i < len; i++){
+        let scriptName = out[i].match(REG.SCRIPT_NAME);
+        let item = srcPath + scriptName[1];
+        let pos = oriContent.indexOf(out[i]);
+        if(pos === -1){
+          content += out[i];
+          continue;
+        }
+        let substring = oriContent.substring(0, pos + 1);
+        let inlineCommentPos = substring.lastIndexOf('//');
+        if(inlineCommentPos > -1){
+          let s = substring.substr(inlineCommentPos);
+          //如果//到document.write之间没有换行符，则document.write在单行注释里
+          if(s.indexOf('\n') === -1 && s.indexOf('\r') === -1){
+            continue;
+          }
+        }
+        let pos1 = substring.indexOf('/*');
+        let pos2 = substring.indexOf('*/');
+        //如果/*的位置在*/之后，表明当前的document.write在注释中
+        if(pos1 > -1){
+          if(pos2 === -1 || pos1 > pos2){
+            continue;
+          }
+        }
+        content += content ? '\n' : '';
+        content += `/**import from \`${item}\` **/\n`;
+        content += await this.invokeSelf(item, {
+          parentFile: filepath,
+          times: times + 1
+        });
+        content += '\n';
+        flag = true;
+      }
+      let ret = flag ? content : oriContent;
+      cache[filepath] = content;
+      return ret;
+    }
+    cache[filepath] = oriContent;
+    return oriContent;
+  }
 
-    /**
-     * update
-     */
-    update(str){
-        str = str.trimRight();
-        if (str.charAt(str.length - 1) !== ';') {
-            str += ';';
-        }
-        this.log('content: ', str, '<--------end');
-        this.setContent(str);
+  /**
+   * update
+   */
+  update(str){
+    str = str.trimRight();
+    if (str.charAt(str.length - 1) !== ';') {
+      str += ';';
     }
-    /**
-     * default include
-     */
-    static include(){
-        return /\.js$/;
-    }
+    this.setContent(str);
+  }
+  /**
+   * default include
+   */
+  static include(){
+    return /\.js$/;
+  }
 
-    /**
-     * use cluster
-     */
-    static cluster(){
-        return false;
-    }
+  /**
+   * use cluster
+   */
+  static cluster(){
+    return false;
+  }
 
-    /**
-     * use cache
-     */
-    static cache(){
-        return false;
-    }
+  /**
+   * use cache
+   */
+  static cache(){
+    return false;
+  }
 }
