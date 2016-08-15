@@ -59,45 +59,47 @@ export default class JSCombinePlugin extends Plugin {
     let out = oriContent.match(REG.DOCUMENT_WRITE);
     if(out){
       let matches = oriContent.match(REG.SRCPATH);
-      let srcPath = matches[2];
-      let content = '', len = out.length, flag = false;
-      for(let i = 0; i < len; i++){
-        let scriptName = out[i].match(REG.SCRIPT_NAME);
-        let item = srcPath + scriptName[1];
-        let pos = oriContent.indexOf(out[i]);
-        if(pos === -1){
-          content += out[i];
-          continue;
-        }
-        let substring = oriContent.substring(0, pos + 1);
-        let inlineCommentPos = substring.lastIndexOf('//');
-        if(inlineCommentPos > -1){
-          let s = substring.substr(inlineCommentPos);
-          //如果//到document.write之间没有换行符，则document.write在单行注释里
-          if(s.indexOf('\n') === -1 && s.indexOf('\r') === -1){
+      if(matches){
+        let srcPath = matches[2];
+        let content = '', len = out.length, flag = false;
+        for(let i = 0; i < len; i++){
+          let scriptName = out[i].match(REG.SCRIPT_NAME);
+          let item = srcPath + scriptName[1];
+          let pos = oriContent.indexOf(out[i]);
+          if(pos === -1){
+            content += out[i];
             continue;
           }
-        }
-        let pos1 = substring.indexOf('/*');
-        let pos2 = substring.indexOf('*/');
-        //如果/*的位置在*/之后，表明当前的document.write在注释中
-        if(pos1 > -1){
-          if(pos2 === -1 || pos1 > pos2){
-            continue;
+          let substring = oriContent.substring(0, pos + 1);
+          let inlineCommentPos = substring.lastIndexOf('//');
+          if(inlineCommentPos > -1){
+            let s = substring.substr(inlineCommentPos);
+            //如果//到document.write之间没有换行符，则document.write在单行注释里
+            if(s.indexOf('\n') === -1 && s.indexOf('\r') === -1){
+              continue;
+            }
           }
+          let pos1 = substring.indexOf('/*');
+          let pos2 = substring.indexOf('*/');
+          //如果/*的位置在*/之后，表明当前的document.write在注释中
+          if(pos1 > -1){
+            if(pos2 === -1 || pos1 > pos2){
+              continue;
+            }
+          }
+          content += content ? '\n' : '';
+          content += `/**import from \`${item}\` **/\n`;
+          content += await this.invokeSelf(item, {
+            parentFile: filepath,
+            times: times + 1
+          });
+          content += '\n';
+          flag = true;
         }
-        content += content ? '\n' : '';
-        content += `/**import from \`${item}\` **/\n`;
-        content += await this.invokeSelf(item, {
-          parentFile: filepath,
-          times: times + 1
-        });
-        content += '\n';
-        flag = true;
+        let ret = flag ? content : oriContent;
+        cache[filepath] = content;
+        return ret;
       }
-      let ret = flag ? content : oriContent;
-      cache[filepath] = content;
-      return ret;
     }
     cache[filepath] = oriContent;
     return oriContent;
