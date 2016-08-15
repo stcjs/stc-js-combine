@@ -1,7 +1,7 @@
 {
   "name": "stc-js-combine",
-  "description": "js combine ",
-  "version": "1.0.2",
+  "description": "Use document.write to combine js for STC ",
+  "version": "1.0.3",
   "author": {
     "name": "newby1",
     "email": "newby1@sina.com"
